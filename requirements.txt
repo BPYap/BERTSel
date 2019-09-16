@@ -1,0 +1,5 @@
+-f https://download.pytorch.org/whl/torch_stable.html
+pytorch-transformers
+scipy
+sklearn
+tensorboardX
