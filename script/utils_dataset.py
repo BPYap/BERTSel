@@ -56,7 +56,7 @@ class InputFeatures(object):
 
 
 class BERTSelProcessor:
-    def get_train_examples(self, data_dir, num_negative=2):
+    def get_train_examples(self, data_dir, num_negative=1):
         question_file = f"{data_dir}/train_questions.txt"
         answer_file = f"{data_dir}/train_answers.txt"
         return self._create_examples_from_files("train", question_file, answer_file, num_negative)
@@ -80,25 +80,21 @@ class BERTSelProcessor:
         with open(answer_file, 'r', encoding='utf-8') as f:
             answers = [line.strip() for line in f]
 
-        # positive examples
         for i, q in enumerate(questions):
             guid = f"{set_type}-{i}"
             a = answers[i]
+            # positive examples
             examples.append(InputExample(guid=guid, text_a=q.strip(), text_b=a.strip(), label="1"))
 
-        if num_negative > 0:
-            # negative examples
-            i = len(examples)
-            for j in range(len(questions)):
+            if num_negative > 0:
+                # negative examples
                 negative_examples = []
                 while len(negative_examples) < num_negative:
                     r = random.choice(range(len(questions)))
-                    if r != j:
-                        guid = f"{set_type}-{i}"
-                        i += 1
-                        q = questions[r]
-                        a = answers[r]
-                        negative_examples.append(InputExample(guid=guid, text_a=q, text_b=a, label="0"))
+                    if r != i:
+                        guid = f"{set_type}-{i}-{len(negative_examples)}"
+                        n = answers[r]
+                        negative_examples.append(InputExample(guid=guid, text_a=q.strip(), text_b=n.strip(), label="0"))
                 examples.extend(negative_examples)
 
         return examples
