@@ -56,46 +56,48 @@ class InputFeatures(object):
 
 
 class BERTSelProcessor:
-    def get_train_examples(self, data_dir, num_negative=1):
-        question_file = f"{data_dir}/train_questions.txt"
-        answer_file = f"{data_dir}/train_answers.txt"
-        return self._create_examples_from_files("train", question_file, answer_file, num_negative)
+    def get_train_examples(self, args):
+        return self._create_examples_from_files("train", args.data_dir, args.negative_samples)
 
-    def get_dev_examples(self, data_dir, num_negative=1):
-        question_file = f"{data_dir}/dev_questions.txt"
-        answer_file = f"{data_dir}/dev_answers.txt"
-        return self._create_examples_from_files("dev", question_file, answer_file, num_negative)
+    def get_dev_examples(self, args):
+        return self._create_examples_from_files("dev", args.data_dir, args.negative_samples)
 
     @staticmethod
     def get_labels():
         return ["0", "1"]
 
     @staticmethod
-    def _create_examples_from_files(set_type, question_file, answer_file, num_negative=-1):
-        """Creates examples from 2 parallel files. Each line in question_file match with the same line in answer_file"""
-        examples = []
+    def _create_examples_from_files(set_type, data_dir, negative_samples=0):
+        """Creates examples from 2 parallel files. Each line in question_file maps to the same line in answer_file"""
+        questions_file = f"{data_dir}/{set_type}_questions.txt"
+        answers_file = f"{data_dir}/{set_type}_answers.txt"
 
-        with open(question_file, 'r', encoding='utf-8') as f:
+        with open(questions_file, 'r', encoding='utf-8') as f:
             questions = [line.strip() for line in f]
-        with open(answer_file, 'r', encoding='utf-8') as f:
+        with open(answers_file, 'r', encoding='utf-8') as f:
             answers = [line.strip() for line in f]
 
+        examples = []
         for i, q in enumerate(questions):
             guid = f"{set_type}-{i}"
             a = answers[i]
-            # positive examples
-            examples.append(InputExample(guid=guid, text_a=q.strip(), text_b=a.strip(), label="1"))
+            positive = InputExample(guid=guid, text_a=q.strip(), text_b=a.strip(), label="1")
 
-            if num_negative > 0:
+            if negative_samples > 0:
                 # negative examples
-                negative_examples = []
-                while len(negative_examples) < num_negative:
+                negatives = []
+                while len(negatives) < negative_samples:
                     r = random.choice(range(len(questions)))
                     if r != i:
-                        guid = f"{set_type}-{i}-{len(negative_examples)}"
+                        guid = f"{set_type}-{i}-{len(negatives)}"
                         n = answers[r]
-                        negative_examples.append(InputExample(guid=guid, text_a=q.strip(), text_b=n.strip(), label="0"))
-                examples.extend(negative_examples)
+                        negatives.append(InputExample(guid=guid, text_a=q.strip(), text_b=n.strip(), label="0"))
+                # duplicate positive example for each negative example
+                for negative in negatives:
+                    examples.append(positive)
+                    examples.append(negative)
+            else:
+                examples.append(positive)
 
         return examples
 
@@ -118,9 +120,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
 
     features = []
     for (ex_index, example) in enumerate(examples):
-        if ex_index % 10000 == 0:
-            logger.info("Writing example %d of %d" % (ex_index, len(examples)))
-
         tokens_a = tokenizer.tokenize(example.text_a)
 
         tokens_b = None
@@ -235,8 +234,6 @@ def simple_accuracy(preds, labels):
 
 
 def acc_and_f1(preds, labels):
-    print(preds)
-    print(labels)
     acc = simple_accuracy(preds, labels)
     f1 = f1_score(y_true=labels, y_pred=preds)
     return {
@@ -262,9 +259,4 @@ processors = {
 
 output_modes = {
     "BERTSel": "classification"
-}
-
-task_labels = {
-    "neg": "0",
-    "pos": "1",
 }

@@ -14,28 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import json
 import logging
 
 import numpy as np
-from scipy.special import softmax
 import torch
-from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
-from tqdm import tqdm
-
 from pytorch_transformers import (BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
                                   XLNetTokenizer)
-
-from utils_dataset import (convert_examples_to_features,
-                           output_modes, processors, InputExample)
+from scipy.special import softmax
+from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
+from tqdm import tqdm
+from utils_dataset import convert_examples_to_features, output_modes, processors, InputExample
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig)),
-                 ())
+MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
@@ -45,64 +42,56 @@ MODEL_CLASSES = {
 
 
 def inference(args, model, tokenizer, prefix=""):
-    inf_task = args.task_name
-    inf_dataset = load_example(args, inf_task, tokenizer)
-    inf_sampler = SequentialSampler(inf_dataset)
-    inf_dataloader = DataLoader(inf_dataset, sampler=inf_sampler, batch_size=1)
+    predicted = []
+    with open(args.tests, 'r', encoding='utf-8') as f:
+        for text in f:
+            inf_task = args.task_name
+            inf_dataset = load_example(args, text, inf_task, tokenizer)
+            inf_sampler = SequentialSampler(inf_dataset)
+            inf_dataloader = DataLoader(inf_dataset, sampler=inf_sampler, batch_size=args.batch_size)
 
-    # Inference!
-    logger.info("***** Running inference {} *****".format(prefix))
+            # Inference!
+            logger.info("***** Running inference {} *****".format(prefix))
+            confidences = []
+            for i, batch in enumerate(tqdm(inf_dataloader, desc="Inferencing")):
+                model.eval()
+                batch = tuple(t.to(args.device) for t in batch)
 
-    with open(args.answers_file, 'r', encoding='utf-8') as f:
-        answers = [line for line in f]
-    possible_answer_indices = []
-    for i, batch in enumerate(tqdm(inf_dataloader, desc="Inferencing")):
-        model.eval()
-        batch = tuple(t.to(args.device) for t in batch)
+                with torch.no_grad():
+                    inputs = {'input_ids': batch[0],
+                              'attention_mask': batch[1],
+                              'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
+                              # XLM don't use segment_ids
+                              'labels': batch[3]}
+                    outputs = model(**inputs)
+                    inf_loss, logits = outputs[:2]
 
-        with torch.no_grad():
-            inputs = {'input_ids': batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
-                      # XLM don't use segment_ids
-                      'labels': batch[3]}
-            outputs = model(**inputs)
-            inf_loss, logits = outputs[:2]
+                    pred_arr = logits.detach().cpu().numpy()
+                    pred_prob = np.squeeze(softmax(pred_arr, axis=1))
 
-            pred_arr = logits.detach().cpu().numpy()
+                    for j in range(len(pred_prob)):
+                        prob = pred_prob[j][1]
+                        idx = i * args.batch_size + j
+                        confidences.append((idx, prob))
 
-            # logger.info("pred_arr: %s", pred_arr)
-            pred_prob = np.squeeze(softmax(pred_arr, axis=1))
-            # logger.info("[0]: %s, [1]: %s", pred_prob[0], pred_prob[1])
+            predictions = sorted(confidences, key=lambda x: x[1], reverse=True)
+            ranks = [p[0] for p in predictions]
+            predicted.append(ranks)
 
-            if args.output_mode == "classification":
-                pred = np.argmax(pred_arr, axis=1)
-            elif args.output_mode == "regression":
-                pred = np.squeeze(pred_arr)
-
-            # if pred == 0:
-            #     logger.info("Text is negative with confidence: %d ", pred_prob[0] * 100)
-            # else:
-            #     logger.info("Text is positive with confidence: %d ", pred_prob[1] * 100)
-
-            if pred == 1:
-                possible_answer_indices.append((pred_prob[1] * 100, i))
-
-    print(f"\n{len(possible_answer_indices)} possible answers for '{args.text}':")
-    for prob, i in sorted(possible_answer_indices, key=lambda x: x[0], reverse=True):
-        print(f"[{round(prob, 2)}%] {answers[i]}")
+    with open(args.output_path, 'w') as f:
+        json.dump(predicted, f)
 
 
-def load_example(args, task, tokenizer):
+def load_example(args, text, task, tokenizer):
     processor = processors[task]()
     output_mode = output_modes[task]
 
     logger.info("Creating features from input")
     label_list = processor.get_labels()
     examples = []
-    with open(args.answers_file, 'r', encoding='utf-8') as f:
+    with open(args.answers_pool, 'r', encoding='utf-8') as f:
         for i, line in enumerate(f):
-            examples.append(InputExample(guid=i, text_a=args.text, text_b=line, label="1"))
+            examples.append(InputExample(guid=i, text_a=text, text_b=line, label="1"))
 
     features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
                                             cls_token_at_end=bool(args.model_type in ['xlnet']),
@@ -119,8 +108,6 @@ def load_example(args, task, tokenizer):
     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
     if output_mode == "classification":
         all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
-    elif output_mode == "regression":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
 
     dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
     return dataset
@@ -133,12 +120,9 @@ def main():
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
-                            ALL_MODELS))
+                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(MODELS))
     parser.add_argument("--task_name", default=None, type=str, required=True,
                         help="The name of the task to train selected in the list: " + ", ".join(processors.keys()))
-    parser.add_argument("--text", default="None", type=str, required=True,
-                        help="text to analyze")
 
     # Other parameters
     parser.add_argument("--config_name", default="", type=str,
@@ -148,15 +132,19 @@ def main():
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after tokenization. Sequences longer "
                              "than this will be truncated, sequences shorter will be padded.")
-
+    parser.add_argument("--batch_size", default=8, type=int)
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
-
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
 
-    parser.add_argument("--answers_file", default=None, type=str, required=True,
-                        help="Path to text file with answers separated by newline")
+    parser.add_argument("--tests", default=None, type=str, required=True,
+                        help="Path to text file containing test questions. Each question is separated by newline.")
+    parser.add_argument("--answers_pool", default=None, type=str, required=True,
+                        help="Path to text file containing list of answers to be compared against each test question."
+                             "Each answer is separated by newline.")
+    parser.add_argument("--output_path", default=None, type=str, required=True,
+                        help="Path to output file. The output will be stored as a json file.")
     args = parser.parse_args()
 
     # Setup CUDA, GPU & distributed training

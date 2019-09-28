@@ -24,27 +24,23 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
-from torch.utils.data.distributed import DistributedSampler
-from tensorboardX import SummaryWriter
-from tqdm.auto import tqdm
-
+from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
                                   XLNetTokenizer)
-
-from pytorch_transformers import AdamW, WarmupLinearSchedule
-
+from tensorboardX import SummaryWriter
+from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
+                              TensorDataset)
+from torch.utils.data.distributed import DistributedSampler
+from tqdm.auto import tqdm
 from utils_dataset import acc_and_f1, convert_examples_to_features, output_modes, processors
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig)),
-                 ())
+MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
@@ -256,8 +252,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels()
-        examples = processor.get_dev_examples(args.data_dir) if evaluate \
-            else processor.get_train_examples(args.data_dir)
+        examples = processor.get_dev_examples(args) if evaluate else processor.get_train_examples(args)
         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
                                                 cls_token_at_end=bool(args.model_type in ['xlnet']),
                                                 # xlnet has a cls token at the end
@@ -293,8 +288,7 @@ def main():
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
-                            ALL_MODELS))
+                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(MODELS))
     parser.add_argument("--task_name", default=None, type=str, required=True,
                         help="The name of the task to train selected in the list: " + ", ".join(processors.keys()))
     parser.add_argument("--output_dir", default=None, type=str, required=True,
@@ -363,6 +357,8 @@ def main():
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank")
+    parser.add_argument("--negative_samples", type=int, default=0,
+                        help="Number of negative examples")
     args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(
