@@ -12,7 +12,7 @@ This repository contains reference implementation for [BERTSel: Answer Selection
 ### Step 1: Clone the repository
 ```
 git clone https://github.com/BPYap/BERTSel
-cd BertSel
+cd BERTSel
 ```
 ### Step 2: Install dependencies
 ```
