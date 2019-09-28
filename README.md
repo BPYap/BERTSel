@@ -35,7 +35,9 @@ python script/run_dataset.py --task_name BERTSel --do_train --do_eval --do_lower
 Arguments to note:
   DATA_DIR - Path to data directory. The directory should contain the following files:
   `train_questions.txt`, `train_answers.txt`, `dev_questions.txt` and `dev_answers.txt`
+  
   NEGATIVE_SAMPLES - Number of negative sample pairs
+  
   OUTPUT_DIR - Path to model directory
 ```
 
@@ -49,10 +51,13 @@ python script/run_inference.py --task_name BERTSel --do_lower_case --batch_size 
  
 Arguments to note:
   MODEL_DIR - Path to model directory
+  
   TESTS - Path to text file containing test questions. Each question is separated by 
   newline.
+  
   ANSWERS_POOL - Path to text file containing list of answers to be compared against 
   each test question. Each answer is separated by newline.
+  
   OUTPUT_PATH - Path to output file in json format. Entries in the json object 
   corresponds to rank results (highest to lowest) of each question.
 ```
