@@ -67,7 +67,7 @@ def inference(args, model, tokenizer, prefix=""):
                     inf_loss, logits = outputs[:2]
 
                     pred_arr = logits.detach().cpu().numpy()
-                    pred_prob = np.squeeze(softmax(pred_arr, axis=1))
+                    pred_prob = softmax(pred_arr, axis=1)
 
                     for j in range(len(pred_prob)):
                         prob = pred_prob[j][1]
@@ -144,7 +144,8 @@ def main():
                         help="Path to text file containing list of answers to be compared against each test question."
                              "Each answer is separated by newline.")
     parser.add_argument("--output_path", default=None, type=str, required=True,
-                        help="Path to output file. The output will be stored as a json file.")
+                        help="Path to output file in json format. Entries in the json object corresponds to "
+                             "rank results (highest to lowest) of each question.")
     args = parser.parse_args()
 
     # Setup CUDA, GPU & distributed training
