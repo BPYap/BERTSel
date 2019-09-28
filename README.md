@@ -52,14 +52,13 @@ python script/run_inference.py --task_name BERTSel --do_lower_case --batch_size 
 Arguments to note:
   MODEL_DIR - Path to model directory
   
-  TESTS - Path to text file containing test questions. Each question is separated by 
-  newline.
+  TESTS - Path to text file containing test questions. Each question is separated by newline.
   
-  ANSWERS_POOL - Path to text file containing list of answers to be compared against 
-  each test question. Each answer is separated by newline.
+  ANSWERS_POOL - Path to text file containing list of answers to be compared against each test question. 
+  Each answer is separated by newline.
   
-  OUTPUT_PATH - Path to output file in json format. Entries in the json object 
-  corresponds to rank results (highest to lowest) of each question.
+  OUTPUT_PATH - Path to output file in json format. Entries in the json object corresponds to rank results 
+  (highest to lowest) of each question.
 ```
 
 ## References
