@@ -3,7 +3,7 @@
 ##### Table of Contents  
 [Introduction](#introduction)  
 [Installation](#installation)  
-[Usage](#usage) 
+[Basic Usage](#basic-usage) 
 
 ## Introduction
 This repository contains reference implementation for [BERTSel: Answer Selection with Pre-trained Models](https://arxiv.org/abs/1905.07588) using [Transformers](https://github.com/huggingface/transformers) from Hugging Face. 
