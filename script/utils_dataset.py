@@ -14,14 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import csv
 import logging
-import random
 
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import f1_score
 
 logger = logging.getLogger(__name__)
-random.seed(42)
 
 
 class InputExample(object):
@@ -56,48 +55,24 @@ class InputFeatures(object):
 
 
 class BERTSelProcessor:
-    def get_train_examples(self, args):
-        return self._create_examples_from_files("train", args.data_dir, args.negative_samples)
+    def get_train_examples(self, tsv_path):
+        return self._create_examples_from_files("train", tsv_path)
 
-    def get_dev_examples(self, args):
-        return self._create_examples_from_files("dev", args.data_dir, args.negative_samples)
+    def get_dev_examples(self, tsv_path):
+        return self._create_examples_from_files("dev", tsv_path)
 
     @staticmethod
     def get_labels():
         return ["0", "1"]
 
     @staticmethod
-    def _create_examples_from_files(set_type, data_dir, negative_samples=0):
-        """Creates examples from 2 parallel files. Each line in question_file maps to the same line in answer_file"""
-        questions_file = f"{data_dir}/{set_type}_questions.txt"
-        answers_file = f"{data_dir}/{set_type}_answers.txt"
-
-        with open(questions_file, 'r', encoding='utf-8') as f:
-            questions = [line.strip() for line in f]
-        with open(answers_file, 'r', encoding='utf-8') as f:
-            answers = [line.strip() for line in f]
-
-        examples = []
-        for i, q in enumerate(questions):
-            guid = f"{set_type}-{i}"
-            a = answers[i]
-            positive = InputExample(guid=guid, text_a=q.strip(), text_b=a.strip(), label="1")
-
-            if negative_samples > 0:
-                # negative examples
-                negatives = []
-                while len(negatives) < negative_samples:
-                    r = random.choice(range(len(questions)))
-                    if r != i:
-                        guid = f"{set_type}-{i}-{len(negatives)}"
-                        n = answers[r]
-                        negatives.append(InputExample(guid=guid, text_a=q.strip(), text_b=n.strip(), label="0"))
-                # duplicate positive example for each negative example
-                for negative in negatives:
-                    examples.append(positive)
-                    examples.append(negative)
-            else:
-                examples.append(positive)
+    def _create_examples_from_files(set_type, tsv_path):
+        with open(tsv_path, 'r', encoding='utf-8', newline='') as f:
+            examples = []
+            reader = csv.reader(f, delimiter='\t')
+            for i, (question, answer, label) in enumerate(reader):
+                guid = f"{set_type}-{i}"
+                examples.append(InputExample(guid=guid, text_a=question.strip(), text_b=answer.strip(), label=label))
 
         return examples
 
@@ -241,6 +216,43 @@ def acc_and_f1(preds, labels):
         "f1": f1,
         "acc_and_f1": (acc + f1) / 2,
     }
+
+
+def top_one_accuracy(preds, labels):
+    assert len(preds) == len(labels)
+
+    num_correct = 0
+    for pred, label in zip(preds, labels):
+        if pred[0] in label:
+            num_correct += 1
+
+    return num_correct / len(preds)
+
+
+def mean_reciprocal_rank(preds, labels):
+    assert len(preds) == len(labels)
+
+    total_reciprocal_rank = 0
+    for pred, label in zip(preds, labels):
+        best_rank = min([pred.index(l) + 1 for l in label])
+        total_reciprocal_rank += 1 / best_rank
+
+    return total_reciprocal_rank / len(preds)
+
+
+def mean_average_precision(preds, labels):
+    assert len(preds) == len(labels)
+
+    total_average_precision = 0
+    for pred, label in zip(preds, labels):
+        ranks = sorted([pred.index(l) + 1 for l in label])
+        total_precision = 0
+        for i, rank in enumerate(ranks):
+            total_precision += (i + 1) / rank
+
+        total_average_precision += total_precision / len(ranks)
+
+    return total_average_precision / len(preds)
 
 
 def pearson_and_spearman(preds, labels):

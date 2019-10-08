@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import csv
 import json
 import logging
 
-import numpy as np
 import torch
 from pytorch_transformers import (BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
@@ -28,7 +28,8 @@ from pytorch_transformers import (BertConfig,
 from scipy.special import softmax
 from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
 from tqdm import tqdm
-from utils_dataset import convert_examples_to_features, output_modes, processors, InputExample
+from utils_dataset import convert_examples_to_features, output_modes, processors, InputExample, \
+    top_one_accuracy, mean_reciprocal_rank, mean_average_precision
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,13 @@ MODEL_CLASSES = {
 
 def inference(args, model, tokenizer, prefix=""):
     predicted = []
-    with open(args.tests, 'r', encoding='utf-8') as f:
-        for text in f:
+    labels = []
+    with open(args.test_tsv, 'r', encoding='utf-8', newline='') as f:
+        reader = csv.reader(f, delimiter='\t')
+        for question, label in reader:
+            labels.append(label.split(','))
             inf_task = args.task_name
-            inf_dataset = load_example(args, text, inf_task, tokenizer)
+            inf_dataset = load_example(args, question, inf_task, tokenizer)
             inf_sampler = SequentialSampler(inf_dataset)
             inf_dataloader = DataLoader(inf_dataset, sampler=inf_sampler, batch_size=args.batch_size)
 
@@ -81,6 +85,10 @@ def inference(args, model, tokenizer, prefix=""):
     with open(args.output_path, 'w') as f:
         json.dump(predicted, f)
 
+    print(f"Top 1 accuracy: {top_one_accuracy(predicted, labels)}")
+    print(f"Mean reciprocal rank: {mean_reciprocal_rank(predicted, labels)}")
+    print(f"Mean average precision: {mean_average_precision(predicted, labels)}")
+
 
 def load_example(args, text, task, tokenizer):
     processor = processors[task]()
@@ -89,7 +97,7 @@ def load_example(args, text, task, tokenizer):
     logger.info("Creating features from input")
     label_list = processor.get_labels()
     examples = []
-    with open(args.answers_pool, 'r', encoding='utf-8') as f:
+    with open(args.answer_pool, 'r', encoding='utf-8') as f:
         for i, line in enumerate(f):
             examples.append(InputExample(guid=i, text_a=text, text_b=line, label="1"))
 
@@ -138,11 +146,12 @@ def main():
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
 
-    parser.add_argument("--tests", default=None, type=str, required=True,
-                        help="Path to text file containing test questions. Each question is separated by newline.")
-    parser.add_argument("--answers_pool", default=None, type=str, required=True,
-                        help="Path to text file containing list of answers to be compared against each test question."
-                             "Each answer is separated by newline.")
+    parser.add_argument("--test_tsv", default=None, type=str, required=True,
+                        help="Filename of the testing data in .tsv format. Each line should have two items "
+                             "(question, indices) separated by tab. "
+                             "\"indices\" are list of indices of the possible answers in the answer_pool")
+    parser.add_argument("--answer_pool", default=None, type=str, required=True,
+                        help="Path to the .txt file containing list of answer candidates separated by newline.")
     parser.add_argument("--output_path", default=None, type=str, required=True,
                         help="Path to output file in json format. Entries in the json object corresponds to "
                              "rank results (highest to lowest) of each question.")

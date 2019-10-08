@@ -252,7 +252,8 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels()
-        examples = processor.get_dev_examples(args) if evaluate else processor.get_train_examples(args)
+        examples = processor.get_dev_examples(args.dev_tsv) if evaluate \
+            else processor.get_train_examples(args.train_tsv)
         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
                                                 cls_token_at_end=bool(args.model_type in ['xlnet']),
                                                 # xlnet has a cls token at the end
@@ -285,6 +286,12 @@ def main():
     # Required parameters
     parser.add_argument("--data_dir", default=None, type=str, required=True,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
+    parser.add_argument("--train_tsv", default=None, type=str, required=True,
+                        help="Filename of the training data in .tsv format. Each line should have three items "
+                             "(question, answer, label) separated by tab")
+    parser.add_argument("--dev_tsv", default=None, type=str, required=False,
+                        help="Filename of the development data in .tsv format. Each line should have three items "
+                             "(question, answer, label) separated by tab")
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
@@ -357,8 +364,6 @@ def main():
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank")
-    parser.add_argument("--negative_samples", type=int, default=0,
-                        help="Number of negative examples")
     args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(

@@ -22,23 +22,22 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
-## Usage
+## Basic Usage
 ### Train
 ```
-python script/run_dataset.py --task_name BERTSel --do_train --do_eval --do_lower_case \
+python script/run_dataset.py --task_name BERTSel --do_train --do_lower_case \
  --model_type bert --model_name_or_path bert-base-uncased --max_seq_length 512 \
  [--learning_rate LEARNING_RATE] [--num_train_epochs NUM_TRAIN_EPOCHS] \ 
  [--data_dir DATA_DIR] \
- [--negative_samples NEGATIVE_SAMPLES] \ 
+ [--train_tsv TRAIN_TSV] \ 
  [--output_dir OUTPUT_DIR]
 
 Arguments to note:
-  DATA_DIR - Path to data directory. The directory should contain the following files:
-  `train_questions.txt`, `train_answers.txt`, `dev_questions.txt` and `dev_answers.txt`
+  DATA_DIR - Path to data directory. The directory should contain the files needed for training.
   
-  NEGATIVE_SAMPLES - Number of negative sample pairs
+  TRAIN_TSV - Filename of the training data in .tsv format. Each line should have three items (question, answer, label) separated by tab.
   
-  OUTPUT_DIR - Path to model directory
+  OUTPUT_DIR - Path to model directory.
 ```
 
 ### Inference
@@ -46,19 +45,31 @@ Arguments to note:
 python script/run_inference.py --task_name BERTSel --do_lower_case --batch_size 8 \ 
  --max_seq_length 512 --model_type bert \ 
  [--model_name_or_path MODEL_DIR] \
- [--tests TESTS] [--answers_pool ANSWERS_POOL] \ 
+ [--test_tsv TEST_TSV] [--answer_pool ANSWER_POOL] \ 
  [--output_path OUTPUT_PATH]
  
 Arguments to note:
-  MODEL_DIR - Path to model directory
+  MODEL_DIR - Path to model directory.
   
-  TESTS - Path to text file containing test questions. Each question is separated by newline.
+  TEST_TSV - Filename of the testing data in .tsv format. Each line should have two items (question, indices) separated by tab.
+  "indices" are list of indices of the possible answers in the answer_pool.
   
-  ANSWERS_POOL - Path to text file containing list of answers to be compared against each test question. 
-  Each answer is separated by newline.
+  ANSWER_POOL - Path to the .txt file containing list of answer candidates separated by newline.
   
   OUTPUT_PATH - Path to output file in json format. Entries in the json object corresponds to rank results 
   (highest to lowest) of each question.
+```
+
+### Generate Negative Samples
+```
+python script/generate_negatives.py [--input_tsv INPUT_TSV] [--num_negatives NUM_NEGATIVES] [--output_tsv OUTPUT_TSV]
+ 
+Arguments:
+  INPUT_TSV - Path to the training data in .tsv format. Each line should have three items (question, answer, label) separated by tab.
+  
+  NUM_NEGATIVES - Number of negative example to generate for each positive example.
+  
+  OUTPUT_PATH - Path to the output data in .tsv format.
 ```
 
 ## References
