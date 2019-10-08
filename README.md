@@ -52,7 +52,7 @@ Arguments to note:
   MODEL_DIR - Path to model directory.
   
   TEST_TSV - Filename of the testing data in .tsv format. Each line should have two items (question, indices) separated by tab.
-  "indices" are list of indices of the possible answers in the answer_pool.
+  "indices" are list of indices (comma-separated) of the possible answers in the answer_pool.
   
   ANSWER_POOL - Path to the .txt file containing list of answer candidates separated by newline.
   
@@ -67,7 +67,7 @@ python script/generate_negatives.py [--input_tsv INPUT_TSV] [--num_negatives NUM
 Arguments:
   INPUT_TSV - Path to the training data in .tsv format. Each line should have three items (question, answer, label) separated by tab.
   
-  NUM_NEGATIVES - Number of negative example to generate for each positive example.
+  NUM_NEGATIVES - Number of negative examples to generate for each positive example.
   
   OUTPUT_PATH - Path to the output data in .tsv format.
 ```

@@ -149,7 +149,8 @@ def main():
     parser.add_argument("--test_tsv", default=None, type=str, required=True,
                         help="Filename of the testing data in .tsv format. Each line should have two items "
                              "(question, indices) separated by tab. "
-                             "\"indices\" are list of indices of the possible answers in the answer_pool")
+                             "\"indices\" are list of indices (comma-separated) of the possible answers in "
+                             "the answer_pool")
     parser.add_argument("--answer_pool", default=None, type=str, required=True,
                         help="Path to the .txt file containing list of answer candidates separated by newline.")
     parser.add_argument("--output_path", default=None, type=str, required=True,
