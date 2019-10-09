@@ -234,8 +234,8 @@ def mean_reciprocal_rank(preds, labels):
 
     total_reciprocal_rank = 0
     for pred, label in zip(preds, labels):
-        best_rank = min([pred.index(l) + 1 for l in label])
-        total_reciprocal_rank += 1 / best_rank
+        best_rank = min([pred.index(l) for l in label])
+        total_reciprocal_rank += 1 / (best_rank + 1)
 
     return total_reciprocal_rank / len(preds)
 
@@ -245,10 +245,10 @@ def mean_average_precision(preds, labels):
 
     total_average_precision = 0
     for pred, label in zip(preds, labels):
-        ranks = sorted([pred.index(l) + 1 for l in label])
+        ranks = sorted([pred.index(l) for l in label])
         total_precision = 0
         for i, rank in enumerate(ranks):
-            total_precision += (i + 1) / rank
+            total_precision += (i + 1) / (rank + 1)
 
         total_average_precision += total_precision / len(ranks)
 

@@ -48,7 +48,7 @@ def inference(args, model, tokenizer, prefix=""):
     with open(args.test_tsv, 'r', encoding='utf-8', newline='') as f:
         reader = csv.reader(f, delimiter='\t')
         for question, label in reader:
-            labels.append(label.split(','))
+            labels.append([int(l) for l in label.split(',')])
             inf_task = args.task_name
             inf_dataset = load_example(args, question, inf_task, tokenizer)
             inf_sampler = SequentialSampler(inf_dataset)
