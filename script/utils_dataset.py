@@ -23,7 +23,7 @@ from sklearn.metrics import f1_score
 logger = logging.getLogger(__name__)
 
 
-class InputExample(object):
+class InputExample:
     """A single training/test example for simple sequence classification."""
 
     def __init__(self, guid, text_a, text_b=None, label=None):
@@ -44,7 +44,7 @@ class InputExample(object):
         self.label = label
 
 
-class InputFeatures(object):
+class InputFeatures:
     """A single set of features of data."""
 
     def __init__(self, input_ids, input_mask, segment_ids, label_id):
@@ -70,9 +70,13 @@ class BERTSelProcessor:
         with open(tsv_path, 'r', encoding='utf-8', newline='') as f:
             examples = []
             reader = csv.reader(f, delimiter='\t')
-            for i, (question, answer, label) in enumerate(reader):
+            for i, (question, positive, negative) in enumerate(reader):
+                question = question.strip()
+
                 guid = f"{set_type}-{i}"
-                examples.append(InputExample(guid=guid, text_a=question.strip(), text_b=answer.strip(), label=label))
+                positive_example = InputExample(guid=f"{guid}-pos", text_a=question, text_b=positive.strip(), label="1")
+                negative_example = InputExample(guid=f"{guid}-neg", text_a=question, text_b=negative.strip(), label="0")
+                examples.append((positive_example, negative_example))
 
         return examples
 
@@ -94,7 +98,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
     label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
-    for (ex_index, example) in enumerate(examples):
+    for example in examples:
         tokens_a = tokenizer.tokenize(example.text_a)
 
         tokens_b = None
@@ -169,21 +173,9 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         else:
             raise KeyError(output_mode)
 
-        if ex_index < 0:
-            logger.info("*** Example ***")
-            logger.info("guid: %s" % example.guid)
-            logger.info("tokens: %s" % " ".join(
-                [str(x) for x in tokens]))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            logger.info("label: %s (id = %d)" % (example.label, label_id))
-
         features.append(
-            InputFeatures(input_ids=input_ids,
-                          input_mask=input_mask,
-                          segment_ids=segment_ids,
-                          label_id=label_id))
+            InputFeatures(input_ids=input_ids, input_mask=input_mask, segment_ids=segment_ids, label_id=label_id))
+
     return features
 
 

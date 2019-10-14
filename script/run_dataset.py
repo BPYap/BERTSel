@@ -32,6 +32,7 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   XLNetForSequenceClassification,
                                   XLNetTokenizer)
 from tensorboardX import SummaryWriter
+from torch.nn.functional import softmax
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
@@ -104,19 +105,28 @@ def train(args, train_dataset, model, tokenizer):
     model.zero_grad()
     train_iterator = range(int(args.num_train_epochs))
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
+
+    def _get_output(_batch):
+        inputs = {'input_ids': _batch[0],
+                  'attention_mask': _batch[1],
+                  'token_type_ids': _batch[2] if args.model_type in ['bert', 'xlnet'] else None,
+                  # XLM don't use segment_ids
+                  'labels': _batch[3]}
+        return model(**inputs)
+
     for e in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc=f"Epoch {e + 1}/{int(args.num_train_epochs)}",
                               disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {'input_ids': batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
-                      # XLM don't use segment_ids
-                      'labels': batch[3]}
-            ouputs = model(**inputs)
-            loss = ouputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            positive_scores = softmax(_get_output(batch[:4])[1], dim=1)[:, 1]
+            negative_scores = softmax(_get_output(batch[4:])[1], dim=1)[:, 1]
+
+            cross_entropy_loss = -torch.log(positive_scores) - torch.log(1 - negative_scores)
+            hinge_loss = torch.max(torch.tensor(0, dtype=torch.float).to(args.device),
+                                   1 - positive_scores + negative_scores)
+            loss = (0.5 * cross_entropy_loss + 0.5 * hinge_loss).sum()
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -133,8 +143,8 @@ def train(args, train_dataset, model, tokenizer):
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                scheduler.step()  # Update learning rate schedule
                 optimizer.step()
+                scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
                 global_step += 1
 
@@ -199,7 +209,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         out_label_ids = None
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
-            batch = tuple(t.to(args.device) for t in batch)
+            batch = tuple(t.to(args.device) for t in batch)[:4]
 
             with torch.no_grad():
                 inputs = {'input_ids': batch[0],
@@ -219,7 +229,6 @@ def evaluate(args, model, tokenizer, prefix=""):
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
                 out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
 
-        eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
             preds = np.argmax(preds, axis=1)
         elif args.output_mode == "regression":
@@ -241,7 +250,8 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     processor = processors[task]()
     output_mode = output_modes[task]
     # Load data features from cache or dataset file
-    cached_features_file = os.path.join(args.data_dir, 'cached_{}_{}_{}_{}'.format(
+    data_dir = os.path.dirname(args.train_tsv)
+    cached_features_file = os.path.join(data_dir, 'cached_{}_{}_{}_{}'.format(
         'dev' if evaluate else 'train',
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
         str(args.max_seq_length),
@@ -250,11 +260,19 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
-        logger.info("Creating features from dataset file at %s", args.data_dir)
+        logger.info("Creating features from dataset file at %s", data_dir)
         label_list = processor.get_labels()
-        examples = processor.get_dev_examples(args.dev_tsv) if evaluate \
+        pair_examples = processor.get_dev_examples(args.dev_tsv) if evaluate \
             else processor.get_train_examples(args.train_tsv)
-        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
+
+        positive_examples = []
+        negative_examples = []
+        for postive, negative in pair_examples:
+            positive_examples.append(postive)
+            negative_examples.append(negative)
+
+        def _get_features(examples):
+            return convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
                                                 cls_token_at_end=bool(args.model_type in ['xlnet']),
                                                 # xlnet has a cls token at the end
                                                 cls_token=tokenizer.cls_token,
@@ -263,20 +281,33 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
                                                 pad_on_left=bool(args.model_type in ['xlnet']),
                                                 # pad on the left for xlnet
                                                 pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0)
+
+        features = zip(_get_features(positive_examples), _get_features(negative_examples))
+
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
     # Convert to Tensors and build dataset
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-    if output_mode == "classification":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
-    elif output_mode == "regression":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
+    pos_input_ids = []
+    pos_input_mask = []
+    pos_segment_ids = []
+    neg_input_ids = []
+    neg_input_mask = []
+    neg_segment_ids = []
+    for postive, negative in features:
+        pos_input_ids.append(postive.input_ids)
+        pos_input_mask.append(postive.input_mask)
+        pos_segment_ids.append(postive.segment_ids)
 
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        neg_input_ids.append(negative.input_ids)
+        neg_input_mask.append(negative.input_mask)
+        neg_segment_ids.append(negative.segment_ids)
+
+    temp = [pos_input_ids, pos_input_mask, pos_segment_ids, [1] * len(pos_input_ids),
+            neg_input_ids, neg_input_mask, neg_segment_ids, [0] * len(pos_input_ids)]
+    dataset = TensorDataset(*[torch.tensor(l, dtype=torch.long) for l in temp])
+
     return dataset
 
 
@@ -284,8 +315,6 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Required parameters
-    parser.add_argument("--data_dir", default=None, type=str, required=True,
-                        help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--train_tsv", default=None, type=str, required=True,
                         help="Filename of the training data in .tsv format. Each line should have three items "
                              "(question, answer, label) separated by tab")
