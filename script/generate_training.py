@@ -1,6 +1,7 @@
 import argparse
 import csv
 import random
+from collections import defaultdict
 
 random.seed(42)
 
@@ -17,21 +18,27 @@ if __name__ == '__main__':
     reader = csv.reader(input_file, delimiter='\t')
     writer = csv.writer(output_file, delimiter='\t')
 
-    question_answers = dict()
+    positives = []
+    negatives = defaultdict(list)
+    answers = set()
     for question, answer, label in reader:
         if label == "1":
-            question_answers[question] = answer
+            positives.append((question, answer))
         else:
-            writer.writerow([question, answer, label])
+            negatives[question].append(answer)
+        answers.add(answer)
 
-    answers = list(question_answers.values())
-    for question, answer in question_answers.items():
+    answers = list(answers)
+    for question, positive in positives:
         counter = 0
         while counter < args.num_negatives:
-            negative = random.choice(answers)
-            if negative != answer:
-                writer.writerow([question, answer, 1])
-                writer.writerow([question, negative, 0])
+            if len(negatives[question]) > 0:
+                negative = negatives[question].pop()
+            else:
+                negative = random.choice(answers)
+
+            if negative != positive:
+                writer.writerow([question, positive, negative])
                 counter += 1
 
     input_file.close()

@@ -28,14 +28,11 @@ pip install -r requirements.txt
 python script/run_dataset.py --task_name BERTSel --do_train --do_lower_case \
  --model_type bert --model_name_or_path bert-base-uncased --max_seq_length 512 \
  [--learning_rate LEARNING_RATE] [--num_train_epochs NUM_TRAIN_EPOCHS] \ 
- [--data_dir DATA_DIR] \
  [--train_tsv TRAIN_TSV] \ 
  [--output_dir OUTPUT_DIR]
 
 Arguments to note:
-  DATA_DIR - Path to data directory. The directory should contain the files needed for training.
-  
-  TRAIN_TSV - Filename of the training data in .tsv format. Each line should have three items (question, answer, label) separated by tab.
+  TRAIN_TSV - Patb to training data in .tsv format. Each line should have three items (question, answer, label) separated by tab.
   
   OUTPUT_DIR - Path to model directory.
 ```
@@ -60,16 +57,16 @@ Arguments to note:
   (highest to lowest) of each question.
 ```
 
-### Generate Negative Samples
+### Generate Training Examples
 ```
-python script/generate_negatives.py [--input_tsv INPUT_TSV] [--num_negatives NUM_NEGATIVES] [--output_tsv OUTPUT_TSV]
+python script/generate_training.py [--input_tsv INPUT_TSV] [--num_negatives NUM_NEGATIVES] [--output_tsv OUTPUT_TSV]
  
 Arguments:
-  INPUT_TSV - Path to the training data in .tsv format. Each line should have three items (question, answer, label) separated by tab.
+  INPUT_TSV - Path to the training data in .tsv format. Each line should have three items: (question, answer, label) separated by tab.
   
-  NUM_NEGATIVES - Number of negative examples to generate for each positive example.
+  NUM_NEGATIVES - Number of training pairs to generate for each positive example.
   
-  OUTPUT_PATH - Path to the output data in .tsv format.
+  OUTPUT_PATH - Path to the output data in .tsv format. Each line in the output .tsv contains three items: (question, positive_answer, negative_answer) separated by tab.
 ```
 
 ## References
