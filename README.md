@@ -32,7 +32,7 @@ python script/run_dataset.py --task_name BERTSel --do_train --do_lower_case \
  [--output_dir OUTPUT_DIR]
 
 Arguments to note:
-  TRAIN_TSV - Patb to training data in .tsv format. Each line should have three items (question, answer, label) separated by tab.
+  TRAIN_TSV - Patb to training data in .tsv format. Each line should have three items (question, positive_answer, negative_answer) separated by tab.
   
   OUTPUT_DIR - Path to model directory.
 ```
