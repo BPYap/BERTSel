@@ -231,8 +231,8 @@ def evaluate(args, model, tokenizer, prefix=""):
 
         if args.output_mode == "classification":
             preds = np.argmax(preds, axis=1)
-        elif args.output_mode == "regression":
-            preds = np.squeeze(preds)
+        else:
+            raise KeyError(args.output_mode)
         result = acc_and_f1(preds, out_label_ids)
         results.update(result)
 

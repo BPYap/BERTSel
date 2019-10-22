@@ -168,8 +168,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
 
         if output_mode == "classification":
             label_id = label_map[example.label]
-        elif output_mode == "regression":
-            label_id = float(example.label)
         else:
             raise KeyError(output_mode)
 
