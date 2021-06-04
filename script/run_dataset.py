@@ -317,10 +317,10 @@ def main():
     # Required parameters
     parser.add_argument("--train_tsv", default=None, type=str, required=True,
                         help="Filename of the training data in .tsv format. Each line should have three items "
-                             "(question, answer, label) separated by tab")
+                             "(question, positive_answer, negative_answer) separated by tab")
     parser.add_argument("--dev_tsv", default=None, type=str, required=False,
                         help="Filename of the development data in .tsv format. Each line should have three items "
-                             "(question, answer, label) separated by tab")
+                             "(question, positive_answer, negative_answer) separated by tab")
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
